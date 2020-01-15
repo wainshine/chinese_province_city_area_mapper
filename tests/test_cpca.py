@@ -22,19 +22,21 @@ def assert_addr(addr_df: pd.DataFrame, pos_sensitive=False):
     _assert_line(0, '上海市', '上海市', '徐汇区', '虹漕路461号58号楼5楼', -1, -1, 0)
     _assert_line(1, '福建省', '泉州市', '洛江区', '万安塘西工业区', -1, 0, 3)
     _assert_line(2, '福建省', '福州市', '鼓楼区', '鼓楼医院', 0, -1, 3)
+    _assert_line(3, '天津市', '天津市', '', '', 0, 0, -1)
 
 
 def test_transform():
-    addr_list = ["徐汇区虹漕路461号58号楼5楼", "泉州市洛江区万安塘西工业区", "福建省鼓楼区鼓楼医院"]
+    addr_list = ["徐汇区虹漕路461号58号楼5楼", "泉州市洛江区万安塘西工业区", "福建省鼓楼区鼓楼医院",
+                 "天津市"]
     # 分词模式
     transed = cpca.transform(addr_list)
     assert_addr(transed)
 
     # 全文匹配
-    transed = cpca.transform(addr_list, cut=False)
+    transed = cpca.transform(addr_list, cut=False, pos_sensitive=True)
     assert_addr(transed)
 
-    # 测试pos_sensitive
+    # 分词匹配 测试pos_sensitive
     transed = cpca.transform(addr_list, pos_sensitive=True)
     print(transed)
     assert_addr(transed, pos_sensitive=True)
@@ -77,14 +79,14 @@ def test_fill_province(monkeypatch):
 
 def test_fill_city_1():
     pca = Pca('', '', '朝阳区')
-    cpca._fill_city(pca, {'朝阳区': '北京市'})
+    cpca._fill_city(pca, {'朝阳区': '北京市'}, True)
     assert pca.city == '北京市'
 
 
 def test_fill_city_2(monkeypatch):
     pca = Pca('', '', '朝阳区')
     mo_map = mock_map(monkeypatch, 'area_map', '北京市')
-    cpca._fill_city(pca, {})
+    cpca._fill_city(pca, {}, True)
 
     mo_map.get_value.assert_called_once_with(pca.area, C)
     assert pca.city == '北京市'
@@ -94,7 +96,7 @@ def test_fill_city_3(monkeypatch):
     pca = Pca('江苏省', '', '鼓楼区')
     mock_map(monkeypatch, 'area_map', '', is_contain=True, is_unique_value=False)
     mo_map = mock_map(monkeypatch, 'province_area_map', '南京市')
-    cpca._fill_city(pca, {})
+    cpca._fill_city(pca, {}, True)
 
     mo_map.get_value.assert_called_once_with(('江苏省','鼓楼区'), C)
     assert pca.city == '南京市'
@@ -253,7 +255,7 @@ def test_handle_one_record1(monkeypatch):
     monkeypatch.setattr(cpca, 'city_map', _dict2addr_map({'淮安': '淮安市', '淮安市': '淮安市'}, {'淮安市':'江苏省'}))
     monkeypatch.setattr(cpca, 'area_map', _dict2addr_map({'清浦区': '清浦区'}, {'清浦区': '淮安市'}))
 
-    result1 = cpca._handle_one_record("清浦区人民路111号", {}, True, 0, True)
+    result1 = cpca._handle_one_record("清浦区人民路111号", {}, True, 0, True, True)
 
     assert result1["省"] == '江苏省'
     assert result1['市'] == '淮安市'
@@ -270,7 +272,7 @@ def test_handle_one_record2(monkeypatch):
     monkeypatch.setattr(cpca, 'city_map', _dict2addr_map({'淮安': '淮安市', '淮安市': '淮安市'}, {'淮安市':'江苏省'}))
     monkeypatch.setattr(cpca, 'area_map', _dict2addr_map({'清浦区': '清浦区'}, {'清浦区': '淮安市'}))
 
-    result1 = cpca._handle_one_record("清浦区人民路111号", {}, False, 5, True)
+    result1 = cpca._handle_one_record("清浦区人民路111号", {}, False, 5, True, True)
 
     assert result1["省"] == '江苏省'
     assert result1['市'] == '淮安市'
@@ -288,7 +290,7 @@ def test_handle_one_record3(monkeypatch):
     monkeypatch.setattr(cpca, 'area_map', _dict2addr_map({'清浦区': '清浦区'}, is_unique_value=False))
     monkeypatch.setattr(cpca, 'province_area_map', _dict2addr_map({('江苏省', '清浦区'):''}, {('江苏省', '清浦区'):'淮安市'}))
 
-    result1 = cpca._handle_one_record("江苏省清浦区人民路111号", {}, False, 5, True)
+    result1 = cpca._handle_one_record("江苏省清浦区人民路111号", {}, False, 5, True, True)
 
     assert result1["省"] == '江苏省'
     assert result1['市'] == '淮安市'

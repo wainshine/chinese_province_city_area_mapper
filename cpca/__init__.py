@@ -5,7 +5,7 @@
 from .structures import AddrMap, Pca
 from .structures import P,C,A
 
-VERSION = (0, 1, 0)
+VERSION = (0, 4, 4)
 
 __version__ = ".".join([str(x) for x in VERSION])
 
@@ -98,6 +98,14 @@ def _fill_province_map(province_map, record_dict):
 
 area_map, city_map, province_area_map, province_map, latlng = _data_from_csv()
 
+# 直辖市
+munis = {'北京市', '天津市', '上海市', '重庆市'}
+
+
+def is_munis(city_full_name):
+    return city_full_name in munis
+
+
 myumap = {
     '南关区': '长春市',
     '南山区': '深圳市',
@@ -112,7 +120,7 @@ myumap = {
 }
 
 
-def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_sensitive=False):
+def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_sensitive=False, open_warning=True):
     """将地址描述字符串转换以"省","市","区"信息为列的DataFrame表格
         Args:
             locations:地址描述字符集合,可以是list, Series等任意可以进行for in循环的集合
@@ -124,6 +132,7 @@ def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_s
                       默认值为8是为了能够发现"新疆维吾尔族自治区"这样的长地名
                       如果你的样本中都是短地名的话，可以考虑把这个数字调小一点以提高性能
             pos_sensitive:如果为True则会多返回三列，分别提取出的省市区在字符串中的位置，如果字符串中不存在的话则显示-1
+            open_warning: 是否打开umap警告, 默认打开
         Returns:
             一个Pandas的DataFrame类型的表格，如下：
                |省    |市   |区    |地址                 |
@@ -140,8 +149,8 @@ def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_s
 
     import pandas as pd
 
-    result = pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs], index=index) \
-             if index else pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs])
+    result = pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive, open_warning) for addr in location_strs], index=index) \
+             if index else pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive, open_warning) for addr in location_strs])
     # 这句的唯一作用是让列的顺序好看一些
     if pos_sensitive:
         return result.loc[:, ('省', '市', '区', '地址', '省_pos', '市_pos', '区_pos')]
@@ -149,7 +158,7 @@ def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_s
         return result.loc[:, ('省', '市', '区', '地址')]
 
 
-def _handle_one_record(addr, umap, cut, lookahead, pos_sensitive):
+def _handle_one_record(addr, umap, cut, lookahead, pos_sensitive, open_warning):
     """处理一条记录"""
 
     # 空记录
@@ -164,7 +173,7 @@ def _handle_one_record(addr, umap, cut, lookahead, pos_sensitive):
     # 地名提取
     pca, addr = _extract_addr(addr, cut, lookahead)
 
-    _fill_city(pca, umap)
+    _fill_city(pca, umap, open_warning)
 
     _fill_province(pca)
 
@@ -180,7 +189,7 @@ def _fill_province(pca):
         pca.province = city_map.get_value(pca.city, P)
 
 
-def _fill_city(pca, umap):
+def _fill_city(pca, umap, open_warning):
     """填充市"""
     if not pca.city:
         # 从 区 映射
@@ -200,8 +209,9 @@ def _fill_city(pca, umap):
                 pca.city = province_area_map.get_value(newKey, C)
                 return
 
-        import logging
-        logging.warning("%s 无法映射, 建议添加进umap中", pca.area)
+        if open_warning:
+            import logging
+            logging.warning("%s 无法映射, 建议添加进umap中", pca.area)
 
 
 def _extract_addr(addr, cut, lookahead):
@@ -229,6 +239,8 @@ def _jieba_extract(addr):
         if not getattr(result, pca_property):
             setattr(result, pca_property, full_name)
             setattr(result, pca_property + "_pos", pos)
+            if is_munis(full_name):
+                setattr(result, "province_pos", pos)
             nonlocal truncate
             if pos == truncate:
                 truncate += len(name)
@@ -260,20 +272,24 @@ def _full_text_extract(addr, lookahead):
             if not getattr(result, pca_property):
                 setattr(result, pca_property, full_name)
                 setattr(result, pca_property + "_pos", pos)
+                if is_munis(full_name):
+                    setattr(result, "province_pos", pos)
                 nonlocal truncate
                 if pos == truncate:
                     truncate += len(name)
+            return len(name)
         return _defer_set
 
     # i为起始位置
-    for i in range(len(addr)):
+    i = 0
+    while i < len(addr):
         # 用于设置pca属性的函数
         defer_fun = None
         # l为从起始位置开始的长度,从中提取出最长的地址
-        for l in range(1, lookahead + 1):
-            if i + l > len(addr):
+        for length in range(1, lookahead + 1):
+            if i + length > len(addr):
                 break
-            word = addr[i:i + l]
+            word = addr[i:i + length]
             # 优先提取低级别的行政区 (主要是为直辖市和特别行政区考虑)
             if word in area_map:
                 defer_fun = _set_pca('area', i, word, area_map.get_full_name(word))
@@ -286,6 +302,8 @@ def _full_text_extract(addr, lookahead):
                 continue
 
         if defer_fun:
-            defer_fun()
+            i += defer_fun()
+        else:
+            i += 1
 
     return result, addr[truncate:]

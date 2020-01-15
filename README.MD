@@ -1,3 +1,5 @@
+
+[![Build Status](https://www.travis-ci.org/DQinYuan/chinese_province_city_area_mapper.svg?branch=master)](https://www.travis-ci.org/DQinYuan/chinese_province_city_area_mapper)
 # 简介
 
 一个用于提取简体中文字符串中省，市和区并能够进行映射，检验和简单绘图的python模块。
@@ -22,13 +24,13 @@
 
 常见安装错误：
 
-​     有的朋友在我的博客中反映他们在使用的时候会报如下错误：
+有的朋友在我的博客中反映他们在使用的时候会报如下错误：
 
 ```
 ModuleNotFoundError: No module named 'jieba'
 ```
 
-​            可能是因为某种原因，依赖未能成功的安装上去，这个时候则需要手动使用`pip install jieba`命令进行安装。
+可能是因为某种原因，依赖未能成功的安装上去，这个时候则需要手动使用`pip install jieba`命令进行安装。
 
 
 
@@ -144,6 +146,8 @@ df
 ```
 WARNING:root:鼓楼区 无法映射, 建议添加进umap中
 ```
+
+> 如果想要关闭这个警告信息,可以在调用transform函数时将open_warning置位False
 
 当程序发现重名区并且不知道将其映射到哪一个市时，会将其加入警告信息，
 提示用户最好根据数据给它指定一个市进行映射。
@@ -518,7 +522,15 @@ def echarts_cate_draw(locations, labels, file_path, title="地域分布图", sub
     """
 ```
 
+# How to Contribute
 
+项目代码还很粗糙，如果大家对代码有所改进，欢迎提交回本项目
+，在提交之前，注意以下两点：
+
+ - 在`tests`添加相应的单元测试
+ - 使用`python setup.py test`来运行所有单元测试，确保所有单测都是通过的
+ 
+之后即可提交PR
 
 # END
 
